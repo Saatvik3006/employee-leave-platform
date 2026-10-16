@@ -1,0 +1,144 @@
+### =========================================================================
+### Employee Management & Leave Workflow Platform - HTTP Requests
+### Compatible with IntelliJ IDEA HTTP Client & VS Code REST Client
+### =========================================================================
+
+@baseUrl = http://localhost:8080/api/v1
+
+### 1. Public Registration (Safely defaults to ROLE_EMPLOYEE)
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "firstName": "Charlie",
+  "lastName": "Brown",
+  "email": "charlie.dev@company.com",
+  "password": "Password123!",
+  "jobTitle": "Associate Software Engineer",
+  "departmentId": 1
+}
+
+### 2. Login as Admin
+# @name adminLogin
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin@company.com",
+  "password": "password"
+}
+
+### Store Token
+@adminToken = {{adminLogin.response.body.token}}
+
+### 3. Login as Manager John
+# @name managerLogin
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "username": "manager.john@company.com",
+  "password": "password"
+}
+
+### Store Token
+@managerToken = {{managerLogin.response.body.token}}
+
+### 4. Login as Employee Alice
+# @name aliceLogin
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "username": "alice.dev@company.com",
+  "password": "password"
+}
+
+### Store Token
+@aliceToken = {{aliceLogin.response.body.token}}
+
+### =========================================================================
+### Employee & Department APIs
+### =========================================================================
+
+### 5. Get Alice's Own Profile
+GET {{baseUrl}}/employees/me
+Authorization: Bearer {{aliceToken}}
+
+### 6. Get Alice's Balances
+GET {{baseUrl}}/employees/3/balances
+Authorization: Bearer {{aliceToken}}
+
+### 7. Manager John views Alice's profile (Authorized: Alice reports to John)
+GET {{baseUrl}}/employees/3
+Authorization: Bearer {{managerToken}}
+
+### 8. Alice tries to view Bob's profile (Forbidden IDOR: returns 403)
+GET {{baseUrl}}/employees/4
+Authorization: Bearer {{aliceToken}}
+
+### 9. Admin creates a new Department
+POST {{baseUrl}}/departments
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "code": "FIN",
+  "name": "Finance & Accounting",
+  "description": "Financial planning, audit, and tax operations",
+  "active": true
+}
+
+### 10. List Active Departments (Paginated)
+GET {{baseUrl}}/departments?page=0&size=10&sort=name,asc
+Authorization: Bearer {{aliceToken}}
+
+### =========================================================================
+### Leave Management Workflow
+### =========================================================================
+
+### 11. Alice Submits a Leave Request (5 working days, excluding weekends)
+# @name submitLeave
+POST {{baseUrl}}/leaves
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{
+  "leaveType": "ANNUAL",
+  "startDate": "2026-11-09",
+  "endDate": "2026-11-13",
+  "reason": "Family vacation abroad"
+}
+
+### Store Leave ID
+@leaveId = {{submitLeave.response.body.id}}
+
+### 12. Alice views her submitted leave requests
+GET {{baseUrl}}/leaves/my-requests
+Authorization: Bearer {{aliceToken}}
+
+### 13. Manager John views his team's pending queue
+GET {{baseUrl}}/leaves/manager-queue?status=PENDING
+Authorization: Bearer {{managerToken}}
+
+### 14. Manager John Approves Alice's Leave (Atomically deducts balance)
+PUT {{baseUrl}}/leaves/{{leaveId}}/approve
+Authorization: Bearer {{managerToken}}
+Content-Type: application/json
+
+{
+  "comments": "Approved. Have a great vacation, Alice!"
+}
+
+### 15. View Leave Request Workflow Audit History
+GET {{baseUrl}}/leaves/{{leaveId}}/audits
+Authorization: Bearer {{aliceToken}}
+
+### 16. Alice Cancels her future approved leave (Atomically restores balance)
+PUT {{baseUrl}}/leaves/{{leaveId}}/cancel
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{
+  "comments": "Flight cancelled, restoring leave days"
+}
